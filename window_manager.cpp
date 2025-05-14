@@ -1,3 +1,4 @@
+#include <cstdio>
 #include "window_manager.h"
 #include "globals.h"
 #include "resource_manager.h"
@@ -6,14 +7,19 @@
 void RestartWindow(bool fullscreen,int width,int height,const char* title) {
 
     UnloadResources();
-   SetConfigFlags(0);
+    SetConfigFlags(0);
+    CloseWindow();
 
    if(fullscreen) {
         SetConfigFlags(FLAG_WINDOW_UNDECORATED);
         SetConfigFlags(FLAG_FULLSCREEN);
    }
 
-   InitWindow(width,height,title);
+    InitWindow(width,height,title);
+    ImageFormat(&icon, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    SetWindowIcon(icon);
+    
+   
    
    SetWindowState(FLAG_WINDOW_ALWAYS_RUN);
 
