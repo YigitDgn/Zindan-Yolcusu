@@ -32,6 +32,7 @@ int main() {
     while(!WindowShouldClose() && !shouldExit) {
         float currentWidth = GetScreenWidth();
         float currentHeight = GetScreenHeight();
+        float deltaTime = GetFrameTime();
 
         // Ekran modu değişikliği kontrolü
         if (shouldToggleFullscreen) {
@@ -47,6 +48,11 @@ int main() {
                 m.screenMode = 0;
             }
             shouldToggleFullscreen = false;  // Değişikliği uyguladıktan sonra sıfırla
+        }
+
+        // Sahne güncellemesi
+        if (currentScene == SCENE_EP1) {
+            UpdateEp1Scene(deltaTime);
         }
 
         BeginDrawing();

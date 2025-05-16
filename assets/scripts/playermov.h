@@ -8,6 +8,7 @@ struct Player {
     float frameTimer;
     bool moving;
     bool facingRight;
+    bool hasSword;  // Kılıç var mı?
 };
 
 void InitPlayer(float startX, float startY);

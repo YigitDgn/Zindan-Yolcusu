@@ -261,6 +261,8 @@ void DrawMenu(float currentWidth, float currentHeight) {
                     fadeDirection = 1;
                     fading = true;
                     buttonClicked = true;
+                    // Yeni oyunu başlat
+                    StartNewGame();
                 }
                 if (CheckCollisionPointRec(mouse, devamBtn)) {
                     wprintf(L"[DEBUG] 'Devam Et' butonuna tıklandı!\n");
