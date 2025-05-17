@@ -1,6 +1,8 @@
 #ifndef PLAYERMOV_H
 #define PLAYERMOV_H
 
+#include <raylib.h>
+
 struct Player {
     float x, y;
     float speed;
@@ -16,5 +18,6 @@ void UpdatePlayer();
 void DrawPlayer(float scalefactor);
 
 extern struct Player player;
+extern double lastDamageTime;
 
 #endif 

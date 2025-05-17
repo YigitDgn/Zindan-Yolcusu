@@ -3,9 +3,7 @@
 #include "window_manager.h"
 #include "menu.h"
 #include "assets/scripts/ep1.h"
-
-
-
+#include "assets/scripts/menu_system.h"
 
 extern struct menuState m; // m'yi dışarıdan erişilebilir yap
 
@@ -53,6 +51,15 @@ int main() {
         // Sahne güncellemesi
         if (currentScene == SCENE_EP1) {
             UpdateEp1Scene(deltaTime);
+        }
+
+        // Ana menüye dönüş kontrolü
+        if (ShouldReturnToMainMenu()) {
+            nextScene = SCENE_MENU;   // Geçilecek sahne
+            fading = true;            // Fade efektini başlat
+            fadeAlpha = 0.0f;         // Fade başlangıcı
+            fadeDirection = 1;        // Fade-in
+            ResetReturnToMainMenu();  // Bayrağı sıfırla
         }
 
         BeginDrawing();
