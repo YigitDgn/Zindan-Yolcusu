@@ -1,7 +1,21 @@
 #include <raylib.h>
 #include <stdio.h>
+#include <math.h>
 #include "../../globals.h"
 #include "enemy.h" // Zombie yapısı için
+#include "inventory.h"
+#include "debug.h" // Debug fonksiyonları için
+#include "playermov.h"
+#include "health_system.h"
+#include "camera.h"
+#include "ep1.h"
+
+#ifndef ITEM_HEALTHELIXIR
+#define ITEM_HEALTHELIXIR 3
+#endif
+
+// Debug değişkenleri
+extern bool infiniteMode;
 
 // Karakterin sprite sheet bilgileri
 #define PLAYER_IDLE_FRAMES 5
@@ -24,6 +38,12 @@
 #define PLAYER_ATTACK_FRAME_W 128
 #define PLAYER_ATTACK_FRAME_H 128
 
+// EP1_ZOMBIE_COUNT sabitini tanımla
+#define EP1_ZOMBIE_COUNT 49
+
+// Zombies dizisini extern olarak tanımla
+extern Zombie zombies[EP1_ZOMBIE_COUNT];
+
 // Animasyon setleri
 Texture2D default_idle;
 Texture2D default_walk;
@@ -35,30 +55,13 @@ Texture2D sword_run;   // Kılıçlı koşma animasyonu
 Texture2D jumpside;
 Texture2D player_attack_sword;
 bool player_attack_sword_loaded = false;
+Texture2D ironsword_idle;
+Texture2D ironsword_walk;
+Texture2D ironsword_run;
+Texture2D ironsword_attack;
+bool ironsword_loaded = false;
 
-// Karakterin fiziksel ve animasyonel durumu
-struct Player {
-    float x, y;
-    float speed;
-    int frame;
-    float frameTimer;
-    bool moving;
-    bool facingRight;
-    bool hasSword;  // Kılıç var mı?
-    float velocityY; // Zıplama için dikey hız
-    bool onGround;  // Yerde mi?
-    float attackAreaStartX; // Saldırı alanı başlangıç X
-    float attackAreaStartY; // Saldırı alanı başlangıç Y
-    bool isAttacking; // Saldırıyor mu?
-    bool isAttackAnimPlaying; // Saldırı animasyonu oynuyor mu?
-    int attackAnimFrame; // Saldırı animasyonu frame'i
-    double attackAnimLastTime; // Son saldırı frame zamanı
-    bool attackAnimTriggered; // Saldırı tetiklendi mi?
-    bool hasDealtDamage; // Hasar verildi mi?
-    float attackAnimStartX; // Saldırı başlangıç X
-    float attackAnimTargetX; // Saldırı hedef X
-    float attackAnimTimer; // Saldırı animasyonu zamanlayıcısı
-};
+// Player yapısının tanımını kaldırıyorum çünkü playermov.h'da tanımlı
 
 Player player;
 
@@ -86,6 +89,14 @@ void InitPlayer(float startX, float startY) {
         player_attack_sword_loaded = true;
     }
 
+    if (!ironsword_loaded) {
+        ironsword_idle = LoadTexture("assets/sprites/player/ironsword/idle.png");
+        ironsword_walk = LoadTexture("assets/sprites/player/ironsword/walk.png");
+        ironsword_run = LoadTexture("assets/sprites/player/ironsword/run.png");
+        ironsword_attack = LoadTexture("assets/sprites/player/ironsword/attack.png");
+        ironsword_loaded = true;
+    }
+
     player.x = startX;
     player.y = startY;
     player.speed = 2.0f;
@@ -106,6 +117,7 @@ void InitPlayer(float startX, float startY) {
     player.attackAnimStartX = 0.0f;
     player.attackAnimTargetX = 0.0f;
     player.attackAnimTimer = 0.0f;
+    player.swordType = ITEM_RUSTEDSWORD;
 }
 
 void UnloadPlayer() {
@@ -113,18 +125,47 @@ void UnloadPlayer() {
         UnloadTexture(player_attack_sword);
         player_attack_sword_loaded = false;
     }
+    if (ironsword_loaded) {
+        UnloadTexture(ironsword_idle);
+        UnloadTexture(ironsword_walk);
+        UnloadTexture(ironsword_run);
+        UnloadTexture(ironsword_attack);
+        ironsword_loaded = false;
+    }
 }
 
 void UpdatePlayer() {
+    // Debug konsolu açıksa oyun kontrollerini devre dışı bırak
+    extern bool debugConsoleOpen;
+    extern int selectedEquipSlot;
+    extern Inventory playerInventory;
+    extern bool isGameOver;  // Game over durumunu kontrol et
+    
+    // Game over durumunda kontrolleri devre dışı bırak
+    if (isGameOver) return;
+    
+    player.swordType = playerInventory.equip[selectedEquipSlot].type;
+    player.hasSword = (player.swordType == ITEM_RUSTEDSWORD || player.swordType == ITEM_IRONSWORD);
+    if (debugConsoleOpen) return;
+
     player.moving = false;
     bool running = false;
     float gravity = 0.5f; // Yerçekimini azalttım
     float jumpStrength = 20.0f; // Zıplama kuvveti
-    float groundY = GetScreenHeight() - 256 * scalefactor; // Yerin y pozisyonu (ep1.cpp ile uyumlu)
+    float groundOffset = 80 * scalefactor; // Zemini biraz yukarı al
+    float groundY = GetScreenHeight() - groundOffset; // Yerin y pozisyonu
+
+    // Oyuncu hitbox'ı için hesaplamalar
+    float playerSpriteH = 128 * scalefactor * 2.0f;
+    float playerHitboxH = playerSpriteH * 0.9f;
+    float playerHitboxY = (playerSpriteH - playerHitboxH) / 2.0f;
+    float playerGroundY = groundY - (playerHitboxY + playerHitboxH);
 
     // Saldırı kontrolü
     if (IsKeyPressed(KEY_SPACE) && !player.isAttackAnimPlaying) {
+        printf("Saldırı başlatıldı!\n");
         player.isAttackAnimPlaying = true;
+        player.isAttacking = true;
         player.attackAnimTimer = 0.0f;
         player.attackAnimFrame = 0;
         player.attackAnimLastTime = GetTime();
@@ -136,52 +177,14 @@ void UpdatePlayer() {
         } else {
             player.attackAnimTargetX = player.x - 50.0f;
         }
+        running = false;
+        player.speed = 2.0f;
     }
 
-    // Saldırı animasyonu
+    // Eğer saldırı animasyonu oynuyorsa koşma tuşlarını dikkate alma
     if (player.isAttackAnimPlaying) {
-        player.isAttacking = true;
-        double currentTime = GetTime();
-        float frameProgress = (float)((currentTime - player.attackAnimLastTime) / 0.125); // 0.5/4 = 0.125
-        float t = (player.attackAnimFrame + frameProgress) / 4.0f;
-        if (t > 1.0f) t = 1.0f;
-        player.x = player.attackAnimStartX + (player.attackAnimTargetX - player.attackAnimStartX) * t;
-        player.moving = true;
-
-        // Son frame'de ve animasyon bitmeden, sadece bir kez hasar ver
-        if (player.attackAnimFrame == 3 && !player.hasDealtDamage) {
-            float attackAreaW = 128 * scalefactor * 0.5f;
-            float attackAreaH = 128 * scalefactor * 0.9f;
-            float attackAreaX = player.facingRight ? player.x + 128 * scalefactor : player.x - attackAreaW;
-            float attackAreaY = player.y;
-            Rectangle attackAreaRect = {attackAreaX, attackAreaY, attackAreaW, attackAreaH};
-            
-            // Zombi hitbox'ı için extern değişken kullan
-            extern Zombie zombie;
-            Rectangle zombieHitboxRect = {zombie.x, zombie.y, 128 * scalefactor * 0.8f, 128 * scalefactor * 0.9f};
-            
-            if (CheckCollisionRecs(attackAreaRect, zombieHitboxRect)) {
-                // Zombiye hasar ver
-                float damage = player.hasSword ? 5.0f : 2.0f;
-                zombie.health -= damage;
-                if (zombie.health < 0) zombie.health = 0;
-                player.hasDealtDamage = true;
-                zombie.lastDamageTime = GetTime(); // Zombi hasar alma zamanını kaydet
-            }
-        }
-
-        if (currentTime - player.attackAnimLastTime >= 0.125) { // 0.5/4 = 0.125
-            player.attackAnimFrame++;
-            player.attackAnimLastTime = currentTime;
-        }
-
-        if (player.attackAnimFrame >= 4) {
-            player.isAttackAnimPlaying = false;
-            player.isAttacking = false;
-            player.attackAnimFrame = 0;
-            player.attackAnimTriggered = false;
-        }
-        return;
+        running = false;
+        player.speed = 2.0f;
     }
 
     // Zıplama başlat
@@ -191,21 +194,32 @@ void UpdatePlayer() {
         player.frameTimer = 0.0f;
         player.velocityY = -jumpStrength;
         player.onGround = false;
-        energy -= 15;
+        if (!infiniteMode) energy -= 15;
     }
+
     // Zıplama sırasında fizik
     if (!player.onGround) {
-        player.y += player.velocityY;
+        // Yer çekimini uygula
         player.velocityY += gravity;
         
+        // Yeni pozisyonu hesapla
+        float newY = player.y + player.velocityY;
+        
         // Yere çarpma kontrolü
-        if (player.y >= groundY) {
-            player.y = groundY;
-            player.velocityY = 0.0f;
+        if (newY >= playerGroundY) {
+            player.y = playerGroundY;
+            player.velocityY = 0;
             player.onGround = true;
             isJumping = false;
+        } else {
+            player.y = newY;
         }
+    } else {
+        // Yerdeyken pozisyonu sabitle
+        player.y = playerGroundY;
+        player.velocityY = 0;
     }
+
     if (isJumping) {
         // Zıplama animasyonu frame ilerlet
         int maxFrames = PLAYER_JUMP_FRAMES;
@@ -228,29 +242,44 @@ void UpdatePlayer() {
         }
         return;
     }
-    if (energy > 0.0f) {
+    extern Texture2D d3_texture;
+    extern Texture2D d4_texture;
+    float mapWidth = (d3_texture.width + 49 * d4_texture.width) * scalefactor;
+    float playerMaxX = mapWidth - 128 * scalefactor * 2.0f;
+
+    if (energy > 0.0f || infiniteMode) {
         float moveSpeed = player.speed * GetFrameTime() * 60.0f;
-        if (IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) {
+        bool moved = false;
+        if ((IsKeyDown(KEY_RIGHT) || IsKeyDown(KEY_D)) && player.x < playerMaxX) {
             player.x += moveSpeed;
             player.moving = true;
             player.facingRight = true;
+            moved = true;
         }
-        if (IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A)) {
+        if ((IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_A)) && player.x > 0) {
             player.x -= moveSpeed;
             player.moving = true;
             player.facingRight = false;
+            moved = true;
         }
-        if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) {
+        if (!moved) {
+            player.moving = false;
+        }
+        if ((IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) && !infiniteMode) {
             running = true;
             player.speed = 4.0f;
-        } else {
+        } else if (!infiniteMode) {
             player.speed = 2.0f;
         }
     } else {
         // Enerji yoksa idle'da kal
         player.moving = false;
-        player.speed = 2.0f;
+        if (!infiniteMode) player.speed = 2.0f;
     }
+
+    // Sınırları tekrar uygula (taşma olmasın)
+    if (player.x < 0) player.x = 0;
+    if (player.x > playerMaxX) player.x = playerMaxX;
 
     // Animasyon frame güncelle
     int maxFrames = player.moving ? (running ? PLAYER_RUN_FRAMES : PLAYER_WALK_FRAMES) : PLAYER_IDLE_FRAMES;
@@ -262,19 +291,46 @@ void UpdatePlayer() {
 
     // Enerji güncelle (hareket halindeyken yenilenme olmasın)
     UpdateEnergy(GetFrameTime(), player.moving, running);
+
+    // Eliksir kullanımı (F tuşu)
+    if (IsKeyPressed(KEY_F) && !player.isHealing) {
+        extern Inventory playerInventory;
+        extern int selectedEquipSlot;
+        // Seçili slotta sağlık iksiri varsa kullan
+        if (playerInventory.equip[selectedEquipSlot].type == ITEM_HEALTHELIXIR) {
+            playerInventory.equip[selectedEquipSlot].type = ITEM_NONE;
+            player.isHealing = true;
+            player.healStartTime = GetTime();
+            player.healStartHealth = playerHealth;
+            player.healTargetHealth = 100.0f;
+        }
+    }
+    // Eliksir ile canı yavaş yavaş doldurma
+    if (player.isHealing) {
+        double elapsed = GetTime() - player.healStartTime;
+        float healAmount = (player.healTargetHealth - player.healStartHealth) * (elapsed / 2.0f); // 2 saniyede dolsun
+        playerHealth = player.healStartHealth + healAmount;
+        if (playerHealth >= player.healTargetHealth) {
+            playerHealth = player.healTargetHealth;
+            player.isHealing = false;
+        }
+    }
 }
 
 void DrawPlayer(float scalefactor) {
     bool running = (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)) && player.moving;
-    
     // Saldırı animasyonu
-    Texture2D* attackTex = &default_attack;
-    if (player.hasSword && player_attack_sword_loaded) {
-        attackTex = &player_attack_sword;
-    }
     if (player.isAttacking) {
-        int frameToDraw = player.attackAnimFrame;
         int frameCount = 4; // attack.png 4 frame
+        int frameToDraw = player.attackAnimFrame;
+        Texture2D* attackTex = &default_attack;
+        if (player.hasSword) {
+            if (player.swordType == ITEM_IRONSWORD && ironsword_loaded) {
+                attackTex = &ironsword_attack;
+            } else if (player.swordType == ITEM_RUSTEDSWORD && player_attack_sword_loaded) {
+                attackTex = &player_attack_sword;
+            }
+        }
         int frameWidth = attackTex->width / frameCount;
         int frameHeight = attackTex->height;
         Rectangle src = {
@@ -290,9 +346,68 @@ void DrawPlayer(float scalefactor) {
         float drawW = frameWidth * scale;
         float drawH = frameHeight * scale;
         DrawTexturePro(*attackTex, src, (Rectangle){drawX, drawY, drawW, drawH}, (Vector2){0,0}, 0.0f, WHITE);
+
+        // Saldırı alanı hesaplama
+        float playerHitboxW = drawW * 0.6f;
+        float playerHitboxH = drawH * 0.9f;
+        float playerHitboxX = drawX + (drawW - playerHitboxW) / 2;
+        float playerHitboxY = drawY + (drawH - playerHitboxH) / 2;
+        float attackAreaW = playerHitboxW * 0.5f;
+        float attackAreaH = playerHitboxH;
+        float attackAreaX, attackAreaY;
+        if (player.facingRight) {
+            attackAreaX = playerHitboxX + playerHitboxW;
+        } else {
+            attackAreaX = playerHitboxX - attackAreaW;
+        }
+        attackAreaY = playerHitboxY;
+        Rectangle attackArea = {attackAreaX, attackAreaY, attackAreaW, attackAreaH};
+
+        // Saldırı alanı ile zombi hitbox'ı çakışma kontrolü
+        if (player.attackAnimFrame == 3 && !player.hasDealtDamage) {
+            for (int i = 0; i < EP1_ZOMBIE_COUNT; i++) {
+                float zombieSpriteW = 128 * scalefactor * 1.8f;
+                float zombieSpriteH = 128 * scalefactor * 1.8f;
+                float zombieHitboxW = zombieSpriteW * 0.8f;
+                float zombieHitboxH = zombieSpriteH * 0.9f;
+                float zombieHitboxX = zombies[i].x + (zombieSpriteW - zombieHitboxW) / 2;
+                float zombieHitboxY = zombies[i].y + (zombieSpriteH - zombieHitboxH) / 2;
+                Rectangle zombieHitbox = {zombieHitboxX, zombieHitboxY, zombieHitboxW, zombieHitboxH};
+
+                if (CheckCollisionRecs(attackArea, zombieHitbox)) {
+                    float damage = 2.0f; // Temel hasar (kılıçsız)
+                    if (player.hasSword) {
+                        if (player.swordType == ITEM_IRONSWORD) {
+                            damage = 10.0f;
+                        } else if (player.swordType == ITEM_RUSTEDSWORD) {
+                            damage = 5.0f;
+                        }
+                    }
+                    zombies[i].health -= damage;
+                    if (zombies[i].health < 0) zombies[i].health = 0;
+                    zombies[i].lastDamageTime = GetTime();
+                    player.hasDealtDamage = true;
+                    printf("Zombiye %f hasar verildi! Kalan can: %f\n", damage, zombies[i].health);
+                    break; // Aynı anda sadece bir zombiye hasar verilsin
+                }
+            }
+        }
+
+        static double lastAnimUpdate = 0.0;
+        double currentTime = GetTime();
+        if (currentTime - lastAnimUpdate >= 0.1875) {
+            player.attackAnimFrame++;
+            lastAnimUpdate = currentTime;
+        }
+        if (player.attackAnimFrame >= 4) {
+            printf("Saldırı animasyonu bitti.\n");
+            player.isAttackAnimPlaying = false;
+            player.isAttacking = false;
+            player.attackAnimFrame = 0;
+            player.attackAnimTriggered = false;
+        }
         return;
     }
-
     // Zıplama animasyonu
     if (isJumping && player.moving) {
         int frameW = PLAYER_JUMP_FRAME_W;
@@ -313,14 +428,28 @@ void DrawPlayer(float scalefactor) {
     // Kılıç durumuna göre texture seç
     Texture2D* tex;
     if (player.hasSword) {
-        if (player.moving) {
-            if (running) {
-                tex = &sword_run;  // Kılıçlı koşma animasyonu
+        if (player.swordType == ITEM_IRONSWORD && ironsword_loaded) {
+            if (player.moving) {
+                if (running) {
+                    tex = &ironsword_run;
+                } else {
+                    tex = &ironsword_walk;
+                }
             } else {
-                tex = &sword_walk;  // Kılıçlı yürüme animasyonu
+                tex = &ironsword_idle;
+            }
+        } else if (player.swordType == ITEM_RUSTEDSWORD && rustedSwordLoaded) {
+            if (player.moving) {
+                if (running) {
+                    tex = &sword_run;
+                } else {
+                    tex = &sword_walk;
+                }
+            } else {
+                tex = &sword_idle;
             }
         } else {
-            tex = &sword_idle;  // Kılıçlı idle animasyonu
+            tex = &default_idle;
         }
     } else {
         if (player.moving) {

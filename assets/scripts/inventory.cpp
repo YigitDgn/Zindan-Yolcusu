@@ -7,6 +7,10 @@ Inventory playerInventory;
 bool inventoryOpen = false;
 Texture2D rustedSwordTexture;
 bool rustedSwordLoaded = false;
+Texture2D ironswordTexture;
+bool ironswordLoaded = false;
+Texture2D healthelixirTexture;
+bool healthelixirLoaded = false;
 int selectedEquipSlot = -1;
 
 // Sürükle-bırak değişkenleri
@@ -19,12 +23,28 @@ void InitInventory() {
         rustedSwordTexture = LoadTexture("assets/sprites/items/rustedsword.png");
         rustedSwordLoaded = true;
     }
+    if (!ironswordLoaded) {
+        ironswordTexture = LoadTexture("assets/sprites/items/ironsword.png");
+        ironswordLoaded = true;
+    }
+    if (!healthelixirLoaded) {
+        healthelixirTexture = LoadTexture("assets/sprites/items/healthelixir.png");
+        healthelixirLoaded = true;
+    }
 }
 
 void UnloadInventory() {
     if (rustedSwordLoaded) {
         UnloadTexture(rustedSwordTexture);
         rustedSwordLoaded = false;
+    }
+    if (ironswordLoaded) {
+        UnloadTexture(ironswordTexture);
+        ironswordLoaded = false;
+    }
+    if (healthelixirLoaded) {
+        UnloadTexture(healthelixirTexture);
+        healthelixirLoaded = false;
     }
 }
 
@@ -45,6 +65,12 @@ void DrawEquipSlots(float scalefactor) {
         // Eşya varsa çiz
         if (playerInventory.equip[i].type == ITEM_RUSTEDSWORD && rustedSwordLoaded) {
             DrawTextureEx(rustedSwordTexture, (Vector2){(float)(x + 4), (float)(y + 4)}, 0, 0.75f, WHITE);
+        }
+        if (playerInventory.equip[i].type == ITEM_IRONSWORD && ironswordLoaded) {
+            DrawTextureEx(ironswordTexture, (Vector2){(float)(x + 4), (float)(y + 4)}, 0, 0.75f, WHITE);
+        }
+        if (playerInventory.equip[i].type == ITEM_HEALTHELIXIR && healthelixirLoaded) {
+            DrawTextureEx(healthelixirTexture, (Vector2){(float)(x + 4), (float)(y + 4)}, 0, 0.75f, WHITE);
         }
         
         // Slot numarası
@@ -81,6 +107,12 @@ void DrawInventory(float scalefactor) {
         if (playerInventory.bag[i].type == ITEM_RUSTEDSWORD && rustedSwordLoaded) {
             DrawTextureEx(rustedSwordTexture, (Vector2){(float)(x + 4), (float)(y + 4)}, 0, 0.75f, WHITE);
         }
+        if (playerInventory.bag[i].type == ITEM_IRONSWORD && ironswordLoaded) {
+            DrawTextureEx(ironswordTexture, (Vector2){(float)(x + 4), (float)(y + 4)}, 0, 0.75f, WHITE);
+        }
+        if (playerInventory.bag[i].type == ITEM_HEALTHELIXIR && healthelixirLoaded) {
+            DrawTextureEx(healthelixirTexture, (Vector2){(float)(x + 4), (float)(y + 4)}, 0, 0.75f, WHITE);
+        }
     }
 
     // Ekipman slotları (baş, gövde, bacak)
@@ -96,14 +128,96 @@ void DrawInventory(float scalefactor) {
         if (playerInventory.equip[i].type == ITEM_RUSTEDSWORD && rustedSwordLoaded) {
             DrawTextureEx(rustedSwordTexture, (Vector2){(float)(x + 4), (float)(y + 4)}, 0, 0.75f, WHITE);
         }
+        if (playerInventory.equip[i].type == ITEM_IRONSWORD && ironswordLoaded) {
+            DrawTextureEx(ironswordTexture, (Vector2){(float)(x + 4), (float)(y + 4)}, 0, 0.75f, WHITE);
+        }
+        if (playerInventory.equip[i].type == ITEM_HEALTHELIXIR && healthelixirLoaded) {
+            DrawTextureEx(healthelixirTexture, (Vector2){(float)(x + 4), (float)(y + 4)}, 0, 0.75f, WHITE);
+        }
         // Slot numarası
         char keyText[2];
         snprintf(keyText, sizeof(keyText), "%d", i + 1);
         DrawText(keyText, x + 4, y + EQUIP_BOX_SIZE - 18, 18, WHITE);
     }
 
+    // --- Zombi Level Bilgileri ---
+    int infoFont = 22 * scalefactor;
+    int infoStartY = equipStartY + EQUIP_BOX_SIZE + 48 * scalefactor;
+    int infoX = GetScreenWidth()/2 - 220 * scalefactor;
+    DrawText("Zombi Level Bilgileri:", infoX, infoStartY, infoFont, YELLOW);
+    for (int lvl = 1; lvl <= 5; lvl++) {
+        float maxHealth = 20.0f * (1.0f + (lvl - 1) * 0.5f);
+        float baseDamage;
+        switch(lvl) {
+            case 1: baseDamage = 10.0f; break;
+            case 2: baseDamage = 15.0f; break;
+            case 3: baseDamage = 20.0f; break;
+            case 4: baseDamage = 30.0f; break;
+            case 5: baseDamage = 40.0f; break;
+            default: baseDamage = 10.0f;
+        }
+        float moveSpeed = 1.2f;
+        float attackSpeed = 0.75f;
+        char line[128];
+        snprintf(line, sizeof(line), "Lv.%d  Can: %.0f  Hasar: %.0f  Hiz: %.1f  Saldiri Hizi: %.2f", lvl, maxHealth, baseDamage, moveSpeed, attackSpeed);
+        DrawText(line, infoX, infoStartY + 32 * scalefactor + (lvl-1) * 28 * scalefactor, infoFont, WHITE);
+    }
+
     // Sürükle-bırak işlemleri
     Vector2 mousePos = GetMousePosition();
+
+    // Item isimlerini gösterme
+    for (int i = 0; i < INV_BAG_SIZE; i++) {
+        int col = i % bagCols;
+        int row = i / bagCols;
+        int x = bagStartX + col * (EQUIP_BOX_SIZE + EQUIP_BOX_MARGIN);
+        int y = bagStartY + row * (EQUIP_BOX_SIZE + EQUIP_BOX_MARGIN);
+        if (CheckCollisionPointRec(mousePos, (Rectangle){(float)x, (float)y, (float)EQUIP_BOX_SIZE, (float)EQUIP_BOX_SIZE})) {
+            if (playerInventory.bag[i].type != ITEM_NONE) {
+                const char* itemName = "";
+                switch (playerInventory.bag[i].type) {
+                    case ITEM_RUSTEDSWORD:
+                        itemName = "Pasli Kilic";
+                        break;
+                    case ITEM_IRONSWORD:
+                        itemName = "Demir Kilic";
+                        break;
+                    case ITEM_HEALTHELIXIR:
+                        itemName = "Saglik Iksiri";
+                        break;
+                }
+                int textWidth = MeasureText(itemName, 20);
+                DrawRectangle(mousePos.x + 10, mousePos.y + 10, textWidth + 10, 30, (Color){0, 0, 0, 200});
+                DrawText(itemName, mousePos.x + 15, mousePos.y + 15, 20, WHITE);
+            }
+        }
+    }
+
+    // Ekipman slotları için item isimlerini gösterme
+    for (int i = 0; i < INV_EQUIP_SIZE; i++) {
+        int x = equipStartX + i * (EQUIP_BOX_SIZE + EQUIP_BOX_MARGIN);
+        int y = equipStartY;
+        if (CheckCollisionPointRec(mousePos, (Rectangle){(float)x, (float)y, (float)EQUIP_BOX_SIZE, (float)EQUIP_BOX_SIZE})) {
+            if (playerInventory.equip[i].type != ITEM_NONE) {
+                const char* itemName = "";
+                switch (playerInventory.equip[i].type) {
+                    case ITEM_RUSTEDSWORD:
+                        itemName = "Pasli Kilic";
+                        break;
+                    case ITEM_IRONSWORD:
+                        itemName = "Demir Kilic";
+                        break;
+                    case ITEM_HEALTHELIXIR:
+                        itemName = "Saglik Iksiri";
+                        break;
+                }
+                int textWidth = MeasureText(itemName, 20);
+                DrawRectangle(mousePos.x + 10, mousePos.y + 10, textWidth + 10, 30, (Color){0, 0, 0, 200});
+                DrawText(itemName, mousePos.x + 15, mousePos.y + 15, 20, WHITE);
+            }
+        }
+    }
+
     if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
         if (!dragging) {
             // Sürükleme başlat
@@ -183,6 +297,12 @@ void DrawInventory(float scalefactor) {
     if (dragging) {
         if (rustedSwordLoaded && dragItem == ITEM_RUSTEDSWORD) {
             DrawTextureEx(rustedSwordTexture, (Vector2){mousePos.x - EQUIP_BOX_SIZE/2, mousePos.y - EQUIP_BOX_SIZE/2}, 0, 0.75f, WHITE);
+        }
+        if (ironswordLoaded && dragItem == ITEM_IRONSWORD) {
+            DrawTextureEx(ironswordTexture, (Vector2){mousePos.x - EQUIP_BOX_SIZE/2, mousePos.y - EQUIP_BOX_SIZE/2}, 0, 0.75f, WHITE);
+        }
+        if (healthelixirLoaded && dragItem == ITEM_HEALTHELIXIR) {
+            DrawTextureEx(healthelixirTexture, (Vector2){mousePos.x - EQUIP_BOX_SIZE/2, mousePos.y - EQUIP_BOX_SIZE/2}, 0, 0.75f, WHITE);
         }
     }
 } 

@@ -22,8 +22,30 @@ bool d3_loaded = false;
 Texture2D d4_texture;
 bool d4_loaded = false;
 
+// Çoklu zombi desteği için
+typedef struct {
+    float x, y;
+    int level;
+    bool active;
+} Ep1Zombie;
+
+#define EP1_ZOMBIE_COUNT 49 // 2-50 arası 49 zombi
+#define MAX_DROPPED_ITEMS 20 // Maksimum düşen item sayısı
+
+Ep1Zombie ep1Zombies[EP1_ZOMBIE_COUNT];
+Zombie zombies[EP1_ZOMBIE_COUNT];
+
+// Düşen itemler için global değişkenler
+extern DroppedItem droppedItems[MAX_DROPPED_ITEMS];
+
+// Game over ekranı için değişkenler
+bool isGameOver = false;
+Rectangle restartButton;
+Rectangle menuButton;
+
 // ep1.h başlık dosyası için fonksiyon prototipleri
 typedef void (*VoidFloat3Func)(float, float, float);
+void InitEp1Zombies();
 void InitEp1Scene();
 void UnloadEp1Scene();
 void DrawEp1Scene(float currentWidth, float currentHeight, float scalefactor);
@@ -51,14 +73,25 @@ void InitEp1Scene() {
     float playerX = 0;
     InitPlayer(playerX, playerY);
     
-    // Zombie için
-    float zombieSpriteH = 128 * scalefactor * 1.8f;
-    float zombieHitboxH = zombieSpriteH * 0.9f;
-    float zombieHitboxY = (zombieSpriteH - zombieHitboxH) / 2.0f;
-    float zombieX = d3_texture.width * scalefactor - 200 * scalefactor;
-    float zombieY = groundY - (zombieHitboxY + zombieHitboxH);
-    InitZombie(zombieX, zombieY);
-    
+    // 2-50. bölümlerin en sağına zombi koy
+    for (int i = 0; i < EP1_ZOMBIE_COUNT; i++) {
+        float d4W = d4_texture.width * scalefactor;
+        float zombieSpriteH = 128 * scalefactor * 1.8f;
+        float zombieHitboxH = zombieSpriteH * 0.9f;
+        float zombieHitboxY = (zombieSpriteH - zombieHitboxH) / 2.0f;
+        float zombieX = d3_texture.width * scalefactor + i * d4W + d4W - 200 * scalefactor;
+        float zombieY = groundY - (zombieHitboxY + zombieHitboxH);
+        ep1Zombies[i].x = zombieX;
+        ep1Zombies[i].y = zombieY;
+        // Her 10 bölümde bir level artıyor (2-50 arası bölümler için)
+        ep1Zombies[i].level = 1 + (i / 10);
+        ep1Zombies[i].active = false;
+        InitZombie(&zombies[i], zombieX, zombieY);
+        zombies[i].level = ep1Zombies[i].level;
+        UpdateZombieStats(&zombies[i]);
+        zombies[i].active = false;
+    }
+    InitEp1Zombies();
     InitCamera();
     InitInventory();
 }
@@ -86,22 +119,45 @@ void DrawEp1Scene(float currentWidth, float currentHeight, float scalefactor) {
     // Oyun duraklatılmamışsa player'ı güncelle
     if (!isPaused) {
         UpdatePlayer();
-        UpdateZombie();
-        UpdateDroppedItem();
     }
     
     bool isMoving = player.moving;
+    
+    // Game over kontrolü
+    if (playerHealth <= 0 && !isGameOver) {
+        isGameOver = true;
+        // Butonları oluştur
+        float buttonWidth = 200.0f;
+        float buttonHeight = 50.0f;
+        float centerX = GetScreenWidth() / 2.0f;
+        float centerY = GetScreenHeight() / 2.0f;
+        
+        restartButton = (Rectangle){
+            centerX - buttonWidth - 20.0f,
+            centerY + 50.0f,
+            buttonWidth,
+            buttonHeight
+        };
+        
+        menuButton = (Rectangle){
+            centerX + 20.0f,
+            centerY + 50.0f,
+            buttonWidth,
+            buttonHeight
+        };
+    }
     
     // Sayı tuşlarıyla eşya seçme kontrolü
     for (int i = 0; i < INV_EQUIP_SIZE; i++) {
         if (IsKeyPressed(KEY_ONE + i)) {
             selectedEquipSlot = i;
-            player.hasSword = (playerInventory.equip[i].type == ITEM_RUSTEDSWORD);
+            player.swordType = playerInventory.equip[i].type;
+            player.hasSword = (player.swordType == ITEM_RUSTEDSWORD || player.swordType == ITEM_IRONSWORD);
         }
     }
     
-    // Toplam harita genişliği: d3 + 5*d4
-    float mapWidth = d3_texture.width + 5 * d4_texture.width;
+    // Toplam harita genişliği: d3 + 49*d4
+    float mapWidth = d3_texture.width + 49 * d4_texture.width;
     UpdateCameraToPlayer(mapWidth, d3_texture.height);
     BeginMode2D(*GetCamera());
     
@@ -119,17 +175,19 @@ void DrawEp1Scene(float currentWidth, float currentHeight, float scalefactor) {
         (Rectangle){0,0,(float)d4_texture.width,(float)d4_texture.height},
         (Rectangle){x + texW, y, d4W, d4H},
         (Vector2){0,0}, 0.0f, WHITE);
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 49; i++) { // 49 tane d4.png
         DrawTexturePro(d4_texture,
             (Rectangle){0,0,(float)d4_texture.width,(float)d4_texture.height},
             (Rectangle){x + texW + i * d4W, y, d4W, d4H},
             (Vector2){0,0}, 0.0f, WHITE);
     }
     DrawPlayer(scalefactor);
-    DrawZombie(scalefactor);
+    for (int i = 0; i < EP1_ZOMBIE_COUNT; i++) {
+        DrawZombie(&zombies[i], scalefactor);
+    }
     DrawDroppedItem(scalefactor);
-    DrawHitboxes();
-    DrawRegionNumbers(); // Bölge numaralarını çiz
+    DrawHitboxes(zombies, EP1_ZOMBIE_COUNT);
+    DrawRegionNumbers();
     EndMode2D();
     
     // Sol üste health bar çiz
@@ -146,29 +204,74 @@ void DrawEp1Scene(float currentWidth, float currentHeight, float scalefactor) {
 
     // Debug konsolunu en sona al
     DrawDebugConsole();
+
+    // Game over ekranı
+    if (isGameOver) {
+        // Yarı saydam siyah arkaplan
+        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), (Color){0, 0, 0, 180});
+        
+        // Game Over yazısı
+        const char* gameOverText = "GAME OVER";
+        int fontSize = 60;
+        int textWidth = MeasureText(gameOverText, fontSize);
+        DrawText(gameOverText, 
+            GetScreenWidth()/2 - textWidth/2,
+            GetScreenHeight()/2 - 100,
+            fontSize,
+            RED);
+        
+        // Yeniden başlat butonu
+        DrawRectangleRec(restartButton, (Color){60, 60, 60, 220});
+        DrawRectangleLinesEx(restartButton, 2, WHITE);
+        const char* restartText = "Yeniden Baslat";
+        int restartTextWidth = MeasureText(restartText, 20);
+        DrawText(restartText,
+            restartButton.x + (restartButton.width - restartTextWidth)/2,
+            restartButton.y + (restartButton.height - 20)/2,
+            20,
+            WHITE);
+        
+        // Menü butonu
+        DrawRectangleRec(menuButton, (Color){60, 60, 60, 220});
+        DrawRectangleLinesEx(menuButton, 2, WHITE);
+        const char* menuText = "Ana Menu";
+        int menuTextWidth = MeasureText(menuText, 20);
+        DrawText(menuText,
+            menuButton.x + (menuButton.width - menuTextWidth)/2,
+            menuButton.y + (menuButton.height - 20)/2,
+            20,
+            WHITE);
+        
+        // Buton tıklama kontrolü
+        if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+            Vector2 mousePos = GetMousePosition();
+            
+            if (CheckCollisionPointRec(mousePos, restartButton)) {
+                StartNewGame();
+                isGameOver = false;
+            }
+            else if (CheckCollisionPointRec(mousePos, menuButton)) {
+                // Ana menüye dön
+                isGameOver = false;
+                extern bool returnToMainMenu;
+                returnToMainMenu = true;  // Ana menüye dönüş işlevi
+            }
+        }
+    }
 }
 
 void UpdateEp1Scene(float deltaTime) {
     // ESC tuşu kontrolü
     CheckPauseInput();
-    
-    // Oyun duraklatıldıysa güncelleme yapma
     if (isPaused) return;
-    
-    // Debug konsolunu güncelle
     UpdateDebugConsole();
-    
-    // Oyuncu güncelleme
     UpdatePlayer();
-    
-    // Zombi güncelleme
-    UpdateZombie();
-    
-    // Yere düşen itemi güncelle
-    UpdateDroppedItem();
-    
+    for (int i = 0; i < EP1_ZOMBIE_COUNT; i++) {
+        UpdateZombie(&zombies[i]);
+    }
+    UpdateDroppedItem(); // Düşen itemleri güncelle
     // Kamera güncelleme
-    UpdateCameraToPlayer(d3_texture.width + 5 * d4_texture.width, d3_texture.height);
+    UpdateCameraToPlayer(d3_texture.width + 49 * d4_texture.width, d3_texture.height);
 }
 
 void StartNewGame() {
@@ -181,7 +284,35 @@ void StartNewGame() {
     mana = 100;
     maxMana = 100;
     totalSeconds = 0.0f;
-    gameStartTime = GetTime(); // Oyun başlangıç zamanını sıfırla
+    gameStartTime = GetTime();
     isPaused = false;
+    isGameOver = false;  // Game over durumunu sıfırla
+    
+    // Envanteri sıfırla
+    for (int i = 0; i < INV_BAG_SIZE; i++) {
+        playerInventory.bag[i].type = ITEM_NONE;
+    }
+    for (int i = 0; i < INV_EQUIP_SIZE; i++) {
+        playerInventory.equip[i].type = ITEM_NONE;
+    }
+    player.hasSword = false;
+    player.swordType = ITEM_NONE;
+    
+    // Düşen itemleri sıfırla
+    for (int i = 0; i < MAX_DROPPED_ITEMS; i++) {
+        droppedItems[i].active = false;
+        droppedItems[i].type = ITEM_NONE;
+    }
+    
     InitEp1Scene();
+}
+
+// Zombileri başlatmak için fonksiyon
+void InitEp1Zombies() {
+    for (int i = 0; i < EP1_ZOMBIE_COUNT; i++) {
+        InitZombie(&zombies[i], ep1Zombies[i].x, ep1Zombies[i].y);
+        zombies[i].level = ep1Zombies[i].level;
+        UpdateZombieStats(&zombies[i]);
+        zombies[i].active = ep1Zombies[i].active;
+    }
 }

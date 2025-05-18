@@ -11,6 +11,7 @@ void CheckPauseInput();
 
 // Dışarıdan erişilebilir değişkenler
 extern bool isPaused;
+extern bool returnToMainMenu;
 extern float musicVolume;
 extern float sfxVolume;
 extern int screenMode; 

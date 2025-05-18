@@ -9,6 +9,12 @@
 #include "ep1.h" // Texture değişkenleri için
 #include "inventory.h"
 
+// EP1_ZOMBIE_COUNT sabitini tanımla
+#define EP1_ZOMBIE_COUNT 49
+
+// Zombies dizisini extern olarak tanımla
+extern Zombie zombies[EP1_ZOMBIE_COUNT];
+
 // Debug konsolu için değişkenler
 bool debugConsoleOpen = false;
 bool gravePressed = false;
@@ -18,6 +24,7 @@ int cursorPosition = 0;
 bool commandMode = false;
 bool enterPressed = false;
 bool showHitboxes = false; // Hitbox gösterme durumu
+bool infiniteMode = false; // Sonsuz mod durumu
 
 // Komut geçmişi
 #define MAX_HISTORY 10
@@ -57,7 +64,7 @@ void ExecuteCommand(const char* command) {
             "Oyuncu Pozisyonu: (%.1f, %.1f)\n"
             "Zombi Pozisyonu: (%.1f, %.1f)",
             player.x, player.y,
-            zombie.x, zombie.y
+            zombies[0].x, zombies[0].y
         );
     }
     else if (strncmp(command, "energy ", 7) == 0) {
@@ -82,8 +89,8 @@ void ExecuteCommand(const char* command) {
     else if (strncmp(command, "zombie ", 7) == 0) {
         float x, y;
         if (sscanf(command + 7, "%f %f", &x, &y) == 2) {
-            zombie.x = x;
-            zombie.y = y;
+            zombies[0].x = x;
+            zombies[0].y = y;
             snprintf(debugText, sizeof(debugText), "Zombi pozisyonu (%.1f, %.1f) olarak ayarlandı", x, y);
         }
     }
@@ -99,34 +106,52 @@ void ExecuteCommand(const char* command) {
     }
     else if (strcmp(command, "itemdebug") == 0) {
         extern bool rustedSwordLoaded;
-        extern DroppedItem droppedItem;
         snprintf(debugText, sizeof(debugText),
-            "rustedSwordLoaded: %d\ndroppedItem.active: %d\ndroppedItem.type: %d",
-            rustedSwordLoaded, droppedItem.active, droppedItem.type
+            "rustedSwordLoaded: %d",
+            rustedSwordLoaded
         );
     }
     else if (strncmp(command, "giveitem ", 9) == 0) {
         extern Inventory playerInventory;
         const char* itemName = command + 9;
-        int itemType = 0;
         if (strcmp(itemName, "rustedsword") == 0) {
-            itemType = 1; // ITEM_RUSTEDSWORD
-        }
-        if (itemType > 0) {
-            bool added = false;
             for (int i = 0; i < INV_BAG_SIZE; i++) {
-                if (playerInventory.bag[i].type == 0) {
-                    playerInventory.bag[i].type = (ItemType)itemType;
+                if (playerInventory.bag[i].type == ITEM_NONE) {
+                    playerInventory.bag[i].type = ITEM_RUSTEDSWORD;
                     snprintf(debugText, sizeof(debugText), "%s envantere eklendi.", itemName);
-                    added = true;
                     break;
                 }
             }
-            if (!added) {
-                snprintf(debugText, sizeof(debugText), "Envanterde boş slot yok!");
+        } else if (strcmp(itemName, "ironsword") == 0) {
+            for (int i = 0; i < INV_BAG_SIZE; i++) {
+                if (playerInventory.bag[i].type == ITEM_NONE) {
+                    playerInventory.bag[i].type = ITEM_IRONSWORD;
+                    snprintf(debugText, sizeof(debugText), "%s envantere eklendi.", itemName);
+                    break;
+                }
+            }
+        } else if (strcmp(itemName, "healthelixir") == 0) {
+            for (int i = 0; i < INV_BAG_SIZE; i++) {
+                if (playerInventory.bag[i].type == ITEM_NONE) {
+                    playerInventory.bag[i].type = ITEM_HEALTHELIXIR;
+                    snprintf(debugText, sizeof(debugText), "%s envantere eklendi.", itemName);
+                    break;
+                }
             }
         } else {
             snprintf(debugText, sizeof(debugText), "Bilinmeyen item: %s", itemName);
+        }
+    }
+    else if (strncmp(command, "inf ", 4) == 0) {
+        const char* value = command + 4;
+        if (strcmp(value, "true") == 0) {
+            infiniteMode = true;
+            player.speed = 24.0f; // Normal hızın 12 katı
+            snprintf(debugText, sizeof(debugText), "Sonsuz mod aktif, hız 24.0 olarak ayarlandı");
+        } else if (strcmp(value, "false") == 0) {
+            infiniteMode = false;
+            player.speed = 2.0f; // Normal hıza geri dön
+            snprintf(debugText, sizeof(debugText), "Sonsuz mod pasif, hız 2.0 olarak ayarlandı");
         }
     }
     else {
@@ -228,27 +253,30 @@ void DrawRegionNumbers() {
     int padding = 20;
     
     // d3.png için 1 numarası
-    float d3X = GetScreenWidth()/2 - (d3_texture.width * scalefactor)/2;
+    float d3W = d3_texture.width * scalefactor;
+    float d4W = d4_texture.width * scalefactor;
+    float d3X = GetScreenWidth()/2 - d3W/2;
     float d3Y = GetScreenHeight()/2 - (d3_texture.height * scalefactor)/2;
-    int d3CenterX = d3X + (d3_texture.width * scalefactor)/2;
-    DrawText("1", d3CenterX - MeasureText("1", fontSize)/2, padding, fontSize, WHITE);
+    int d3CenterX = d3X + d3W/2;
     
-    // d4.png'ler için 2,3,4,5,6 numaraları
-    float d4X = d3X + (d3_texture.width * scalefactor);
+    // d4.png'ler için 2,3,...,50 numaraları
+    float d4X = d3X + d3W;
     float d4Y = d3Y;
-    float d4Width = d4_texture.width * scalefactor;
     
-    for (int i = 0; i < 5; i++) {
+    float playerX = player.x;
+    // 1. bölge kontrolü
+    if (playerX < d3W) {
+        int x = d3CenterX - MeasureText("1", fontSize)/2;
+        DrawText("1", x, padding - 10, 60, WHITE);
+    }
+    
+    // 2-50 arası bölgeler için numaralar
+    for (int i = 0; i < 49; i++) { // 49 tane d4.png, toplam 50 bölge
         int num = i + 2; // 2'den başla
-        int x = d4X + (i * d4Width) + (d4Width/2) - MeasureText(TextFormat("%d", num), fontSize)/2;
-        
-        // Karakterin bulunduğu bölgeyi belirle
-        float playerX = player.x;
-        float currentRegionX = d4X + (i * d4Width);
-        bool isPlayerInRegion = (playerX >= currentRegionX && playerX < currentRegionX + d4Width) ||
-                              (i == 0 && playerX >= d3X && playerX < d4X);
-        
-        // Eğer bu bölge karakterin bulunduğu bölgeyse, numarayı büyüt
+        int x = d4X + (i * d4W) + (d4W/2) - MeasureText(TextFormat("%d", num), fontSize)/2;
+        float regionStart = d3W + i * d4W;
+        float regionEnd = d3W + (i+1) * d4W;
+        bool isPlayerInRegion = (playerX >= regionStart && playerX < regionEnd);
         if (isPlayerInRegion) {
             fontSize = 60;
             DrawText(TextFormat("%d", num), x, padding - 10, fontSize, WHITE);
@@ -283,28 +311,24 @@ void DrawDebugConsole() {
     DrawRectangleLinesEx((Rectangle){10, 10, 600, 400}, 2, WHITE);
 }
 
-// Hitbox çizme fonksiyonu
-void DrawHitboxes() {
-    if (!showHitboxes) return;
+// Fonksiyon prototipi
+void DrawHitboxes(Zombie* zombies, int zombieCount);
 
+// Hitbox çizme fonksiyonu
+void DrawHitboxes(Zombie* zombies, int zombieCount) {
+    if (!showHitboxes) return;
     Camera2D* camera = GetCamera();
     if (!camera) return;
-
+    BeginMode2D(*camera);
     // Oyuncu hitbox'ı
     float spriteW = 128 * scalefactor * 2.0f;
     float spriteH = 128 * scalefactor * 2.0f;
-    Vector2 playerScreenTopLeft = GetWorldToScreen2D((Vector2){player.x, player.y}, *camera);
     float playerHitboxW = spriteW * 0.6f;
     float playerHitboxH = spriteH * 0.9f;
-    float playerHitboxX = playerScreenTopLeft.x + (spriteW - playerHitboxW) / 2;
-    float playerHitboxY = playerScreenTopLeft.y + (spriteH - playerHitboxH) / 2;
-    DrawRectangleLinesEx(
-        (Rectangle){playerHitboxX, playerHitboxY, playerHitboxW, playerHitboxH},
-        2,
-        RED
-    );
-
-    // Oyuncu saldırı alanı (attack area)
+    float playerHitboxX = player.x + (spriteW - playerHitboxW) / 2;
+    float playerHitboxY = player.y + (spriteH - playerHitboxH) / 2;
+    DrawRectangleLinesEx((Rectangle){playerHitboxX, playerHitboxY, playerHitboxW, playerHitboxH}, 2, RED);
+    // Oyuncu saldırı alanı
     float playerAttackAreaW = playerHitboxW * 0.5f;
     float playerAttackAreaH = playerHitboxH;
     float playerAttackAreaX, playerAttackAreaY;
@@ -314,57 +338,40 @@ void DrawHitboxes() {
         playerAttackAreaX = playerHitboxX - playerAttackAreaW;
     }
     playerAttackAreaY = playerHitboxY;
-    DrawRectangleLinesEx(
-        (Rectangle){playerAttackAreaX, playerAttackAreaY, playerAttackAreaW, playerAttackAreaH},
-        2,
-        GREEN
-    );
-
-    // Zombi hitbox'ı
-    float zombieSpriteW = 128 * scalefactor * 1.8f;
-    float zombieSpriteH = 128 * scalefactor * 1.8f;
-    Vector2 zombieScreenTopLeft = GetWorldToScreen2D((Vector2){zombie.x, zombie.y}, *camera);
-    float zombieHitboxW = zombieSpriteW * 0.8f;
-    float zombieHitboxH = zombieSpriteH * 0.9f;
-    float zombieHitboxX = zombieScreenTopLeft.x + (zombieSpriteW - zombieHitboxW) / 2;
-    float zombieHitboxY = zombieScreenTopLeft.y + (zombieSpriteH - zombieHitboxH) / 2;
-    DrawRectangleLinesEx(
-        (Rectangle){zombieHitboxX, zombieHitboxY, zombieHitboxW, zombieHitboxH},
-        2,
-        RED
-    );
-
-    // Zombi saldırı alanı (attack area)
-    float attackAreaW = zombieHitboxW * 0.5f; // Eninin yarısı
-    float attackAreaH = zombieHitboxH;        // Kendi yüksekliğiyle aynı
-    float attackAreaX, attackAreaY;
-    if (zombie.isAttackAnimPlaying) {
-        // Saldırı animasyonu sırasında sabit DÜNYA konumunu kameradan geçirerek kullan
-        Vector2 attackAreaScreen = GetWorldToScreen2D((Vector2){zombie.attackAreaStartX, zombie.attackAreaStartY}, *camera);
-        attackAreaX = attackAreaScreen.x;
-        attackAreaY = attackAreaScreen.y;
-    } else {
-        if (zombie.facingRight) {
-            attackAreaX = zombieHitboxX + zombieHitboxW;
+    DrawRectangleLinesEx((Rectangle){playerAttackAreaX, playerAttackAreaY, playerAttackAreaW, playerAttackAreaH}, 2, GREEN);
+    // Çoklu zombi hitbox'ı
+    for (int i = 0; i < zombieCount; i++) {
+        if (zombies[i].isDead) continue; // Ölü zombilerin hitbox'larını çizme
+        
+        float zombieSpriteW = 128 * scalefactor * 1.8f;
+        float zombieSpriteH = 128 * scalefactor * 1.8f;
+        float zombieHitboxW = zombieSpriteW * 0.8f;
+        float zombieHitboxH = zombieSpriteH * 0.9f;
+        float zombieHitboxX = zombies[i].x + (zombieSpriteW - zombieHitboxW) / 2;
+        float zombieHitboxY = zombies[i].y + (zombieSpriteH - zombieHitboxH) / 2;
+        DrawRectangleLinesEx((Rectangle){zombieHitboxX, zombieHitboxY, zombieHitboxW, zombieHitboxH}, 2, RED);
+        // Saldırı alanı
+        float attackAreaW = zombieHitboxW * 0.5f;
+        float attackAreaH = zombieHitboxH;
+        float attackAreaX, attackAreaY;
+        if (zombies[i].isAttackAnimPlaying) {
+            attackAreaX = zombies[i].attackAreaStartX;
+            attackAreaY = zombies[i].attackAreaStartY;
         } else {
-            attackAreaX = zombieHitboxX - attackAreaW;
+            if (zombies[i].facingRight) {
+                attackAreaX = zombieHitboxX + zombieHitboxW;
+            } else {
+                attackAreaX = zombieHitboxX - attackAreaW;
+            }
+            attackAreaY = zombieHitboxY;
         }
-        attackAreaY = zombieHitboxY;
+        DrawRectangleLinesEx((Rectangle){attackAreaX, attackAreaY, attackAreaW, attackAreaH}, 2, ORANGE);
+        // Aktifleşme alanı
+        float activationAreaW = zombieHitboxW * 10.0f;
+        float activationAreaH = zombieHitboxH;
+        float activationAreaX = zombieHitboxX + (zombieHitboxW - activationAreaW) / 2;
+        float activationAreaY = zombieHitboxY;
+        DrawRectangleLinesEx((Rectangle){activationAreaX, activationAreaY, activationAreaW, activationAreaH}, 2, BLUE);
     }
-    DrawRectangleLinesEx(
-        (Rectangle){attackAreaX, attackAreaY, attackAreaW, attackAreaH},
-        2,
-        ORANGE
-    );
-
-    // Zombi aktifleşme alanı (activation area)
-    float activationAreaW = zombieHitboxW * 10.0f;
-    float activationAreaH = zombieHitboxH;
-    float activationAreaX = zombieHitboxX + (zombieHitboxW - activationAreaW) / 2;
-    float activationAreaY = zombieHitboxY;
-    DrawRectangleLinesEx(
-        (Rectangle){activationAreaX, activationAreaY, activationAreaW, activationAreaH},
-        2,
-        BLUE
-    );
+    EndMode2D();
 } 

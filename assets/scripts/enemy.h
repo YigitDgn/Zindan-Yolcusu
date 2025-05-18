@@ -41,18 +41,16 @@ struct Zombie {
     bool willDropRustedSword; // Rusted sword düşürecek mi?
 };
 
-void InitZombie(float startX, float startY);
-void UpdateZombie();
-void DrawZombie(float scalefactor);
-void UpdateZombieStats(); // Level bazlı özellikleri güncelleme fonksiyonu
-void DropItem(); // Item düşürme fonksiyonu
+void InitZombie(struct Zombie* zombie, float startX, float startY);
+void UpdateZombie(struct Zombie* zombie);
+void DrawZombie(struct Zombie* zombie, float scalefactor);
+void UpdateZombieStats(struct Zombie* zombie); // Level bazlı özellikleri güncelleme fonksiyonu
+void DropItem(struct Zombie* zombie); // Item düşürme fonksiyonu
 
 // Yere düşen item ile ilgili fonksiyonlar
 typedef struct DroppedItem DroppedItem;
 extern DroppedItem droppedItem;
 void UpdateDroppedItem();
 void DrawDroppedItem(float scalefactor);
-
-extern struct Zombie zombie;
 
 #endif // ENEMY_H 

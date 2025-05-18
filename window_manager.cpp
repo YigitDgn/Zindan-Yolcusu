@@ -16,6 +16,7 @@ void RestartWindow(bool fullscreen,int width,int height,const char* title) {
    }
 
     InitWindow(width,height,title);
+    icon = LoadImage("main.png");
     ImageFormat(&icon, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
     SetWindowIcon(icon);
     
@@ -43,6 +44,7 @@ void ToggleWindowState(bool decoreted){
 
 void CleanWindow(){
     UnloadResources();
+    UnloadImage(icon);
     CloseWindow();
 }
 

@@ -13,7 +13,7 @@
 #define EQUIP_BOX_START_Y 16 // Başlangıç Y pozisyonu
 
 // Eşya tipleri
-enum ItemType { ITEM_NONE, ITEM_RUSTEDSWORD };
+enum ItemType { ITEM_NONE, ITEM_RUSTEDSWORD, ITEM_IRONSWORD, ITEM_HEALTHELIXIR };
 
 // Envanter slot yapısı
 struct InventorySlot {
@@ -39,4 +39,8 @@ extern Inventory playerInventory;
 extern bool inventoryOpen;
 extern Texture2D rustedSwordTexture;
 extern bool rustedSwordLoaded;
+extern Texture2D ironswordTexture;
+extern bool ironswordLoaded;
+extern Texture2D healthelixirTexture;
+extern bool healthelixirLoaded;
 extern int selectedEquipSlot; 
