@@ -10,12 +10,39 @@ Zindan Yolcusu, Raylib kütüphanesi kullanılarak geliştirilmiş bir macera oy
 - Düşmanlarla savaşacaksınız
 - Hazineler toplayacaksınız
 - Yeni yetenekler kazanacaksınız
-- Gizemli bulmacaları çözeceksiniz
 
-## ⚠️ Geliştirme Aşamasında
+## 🚀 Özellikler
 
-Bu oyun şu anda tasarım aşamasındadır ve henüz oynanabilir değildir. Oyunun temel mekanikleri ve içeriği üzerinde çalışılmaktadır. Yakında daha fazla bilgi paylaşılacaktır.
+- 🎯 Dinamik savaş sistemi
+- 💰 Çeşitli hazine ve eşya sistemi
 
----
+## 🎮 Kontroller
+
+- W A D: Hareket
+- SPACE: Saldırı
+- E: Etkileşim
+- F:İtem Alma
+- TAB: Envanter
+- ESC: Menü
+
+## 📥 Kurulum
+
+1. Projeyi klonlayın:
+```bash
+git clone https://github.com/YigitDgn/Zindan-Yolcusu
+cd Zindan-Yolcusu
+```
+
+2. `compile.bat` dosyasını çalıştırın:
+```bash
+compile.bat
+```
+
+3. `main.exe` dosyasını çalıştırarak oyunu başlatabilirsiniz.
+
+## Projeyi Yapan Kişiler
+
+- [Yiğit Doğan](https://github.com/YigitDgn)
+
 
 *Zindan Yolcusu'nda şansınız bol olsun!* 🍀 

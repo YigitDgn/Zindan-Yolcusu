@@ -1,0 +1,1 @@
+g++ main.cpp globals.cpp menu.cpp resource_manager.cpp window_manager.cpp assets/scripts/ep1.cpp assets/scripts/playermov.cpp assets/scripts/camera.cpp assets/scripts/health_system.cpp assets/scripts/menu_system.cpp assets/scripts/inventory.cpp assets/scripts/enemy.cpp assets/scripts/debug.cpp resource.res -o main.exe -lraylib -lopengl32 -lgdi32 -lwinmm -mwindows
